@@ -1,0 +1,35 @@
+/* Additional component-specific styles */
+.form-builder-container {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.drag-overlay {
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.field-preview {
+  border: 2px dashed hsl(var(--border));
+  border-radius: 6px;
+  padding: 12px;
+  margin: 8px 0;
+  transition: all 0.15s ease-in-out;
+}
+
+.field-preview:hover {
+  border-color: hsl(var(--primary));
+  background-color: hsl(var(--accent));
+}
+
+.sidebar {
+  width: 280px;
+  background-color: hsl(var(--card));
+  border-right: 1px solid hsl(var(--border));
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+}
