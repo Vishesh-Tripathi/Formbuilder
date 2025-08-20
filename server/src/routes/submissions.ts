@@ -115,6 +115,15 @@ router.post('/:formId', submissionLimiter, [
             }
           }
           break;
+
+        case 'file':
+          // Validate file uploads if present
+          if (response.files && response.files.length > 0) {
+            if (field.validation.maxFiles && response.files.length > field.validation.maxFiles) {
+              validationErrors.push(`Field "${field.label}" allows maximum ${field.validation.maxFiles} files`);
+            }
+          }
+          break;
       }
     }
   }

@@ -25,9 +25,10 @@ router.get('/', [
   query('page').optional().isInt({ min: 1 }).toInt(),
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
   query('search').optional().isString().trim(),
+  query('includeFields').optional().isBoolean(),
   handleValidationErrors
 ], asyncHandler(async (req: any, res: any) => {
-  const { status, page = 1, limit = 10, search } = req.query;
+  const { status, page = 1, limit = 10, search, includeFields } = req.query;
   
   // Build query
   const query: any = {};
@@ -39,13 +40,20 @@ router.get('/', [
     ];
   }
 
+  // Build the find query
+  let findQuery = Form.find(query)
+    .sort({ updatedAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  // Conditionally exclude fields for better performance unless specifically requested
+  if (!includeFields || includeFields === 'false') {
+    findQuery = findQuery.select('-fields');
+  }
+
   // Execute query with pagination
   const [forms, total] = await Promise.all([
-    Form.find(query)
-      .sort({ updatedAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .select('-fields'),
+    findQuery,
     Form.countDocuments(query)
   ]);
 
@@ -66,9 +74,19 @@ router.get('/', [
 // GET /api/forms/:id - Get specific form
 router.get('/:id', [
   param('id').isMongoId().withMessage('Invalid form ID'),
+  query('includeFields').optional().isBoolean(),
   handleValidationErrors
 ], asyncHandler(async (req: any, res: any) => {
-  const form = await Form.findById(req.params.id);
+  const { includeFields } = req.query;
+  
+  let findQuery = Form.findById(req.params.id);
+  
+  // Conditionally exclude fields for better performance unless specifically requested
+  if (includeFields === 'false') {
+    findQuery = findQuery.select('-fields');
+  }
+  
+  const form = await findQuery;
   
   if (!form) {
     return res.status(404).json({

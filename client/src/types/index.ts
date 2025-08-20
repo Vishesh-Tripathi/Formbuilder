@@ -8,6 +8,7 @@ export interface IFieldValidation {
   max?: number
   fileTypes?: string[]
   maxFileSize?: number
+  maxFiles?: number
 }
 
 export interface IFieldOption {
@@ -26,6 +27,7 @@ export interface IFormField {
   validation: IFieldValidation
   options?: IFieldOption[]
   order: number
+  step?: number // For multi-step forms
 }
 
 // Form Settings Types
@@ -39,6 +41,11 @@ export interface IFormSettings {
   collectEmail?: boolean
   requireLogin?: boolean
   customCSS?: string
+  redirectUrl?: string
+  redirectDelay?: number | false
+  showPoweredBy?: boolean
+  enableProgressBar?: boolean
+  allowDraftSave?: boolean
 }
 
 // Form Types

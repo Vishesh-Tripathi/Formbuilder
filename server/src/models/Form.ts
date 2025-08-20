@@ -10,6 +10,7 @@ export interface IFieldValidation {
   max?: number;
   fileTypes?: string[];
   maxFileSize?: number;
+  maxFiles?: number;
 }
 
 export interface IFieldOption {
@@ -26,6 +27,7 @@ export interface IFormField {
   validation: IFieldValidation;
   options?: IFieldOption[];
   order: number;
+  step?: number;
 }
 
 // Form Settings Interface
@@ -39,6 +41,11 @@ export interface IFormSettings {
   collectEmail?: boolean;
   requireLogin?: boolean;
   customCSS?: string;
+  redirectUrl?: string;
+  redirectDelay?: number | false;
+  showPoweredBy?: boolean;
+  enableProgressBar?: boolean;
+  allowDraftSave?: boolean;
 }
 
 // Form Document Interface
@@ -77,13 +84,15 @@ const FormFieldSchema = new Schema<IFormField>({
     min: { type: Number },
     max: { type: Number },
     fileTypes: [{ type: String }],
-    maxFileSize: { type: Number }
+    maxFileSize: { type: Number },
+    maxFiles: { type: Number }
   },
   options: [{
     value: { type: String, required: true },
     label: { type: String, required: true }
   }],
-  order: { type: Number, required: true, default: 0 }
+  order: { type: Number, required: true, default: 0 },
+  step: { type: Number }
 }, { _id: false });
 
 const FormSettingsSchema = new Schema<IFormSettings>({
@@ -95,7 +104,12 @@ const FormSettingsSchema = new Schema<IFormSettings>({
   isPublic: { type: Boolean, default: true },
   collectEmail: { type: Boolean, default: false },
   requireLogin: { type: Boolean, default: false },
-  customCSS: { type: String }
+  customCSS: { type: String },
+  redirectUrl: { type: String },
+  redirectDelay: { type: Schema.Types.Mixed, default: 3000 },
+  showPoweredBy: { type: Boolean, default: true },
+  enableProgressBar: { type: Boolean, default: false },
+  allowDraftSave: { type: Boolean, default: false }
 }, { _id: false });
 
 const FormSchema = new Schema<IForm>({
@@ -133,10 +147,10 @@ const FormSchema = new Schema<IForm>({
   },
   slug: {
     type: String,
-    required: true,
     unique: true,
     lowercase: true,
-    trim: true
+    trim: true,
+    index: true
   },
   version: {
     type: Number,
@@ -155,20 +169,44 @@ FormSchema.index({ createdAt: -1 });
 FormSchema.index({ createdBy: 1, status: 1 });
 
 // Pre-save middleware to generate slug
-FormSchema.pre('save', function(next) {
-  if (this.isModified('title')) {
-    this.slug = this.title
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    
-    // Ensure uniqueness by appending timestamp if needed
-    const timestamp = Date.now().toString().slice(-6);
-    this.slug = `${this.slug}-${timestamp}`;
+FormSchema.pre('save', async function(next) {
+  try {
+    // Only generate slug if it's not already set or if title has been modified
+    if (this.isNew || (this.isModified('title') && (!this.slug || this.slug.trim() === ''))) {
+      const generateSlug = (title: string) => {
+        if (!title || title.trim() === '') {
+          return 'untitled-form';
+        }
+        
+        return title
+          .toLowerCase()
+          .replace(/[^\w\s-]/g, '') // Remove special characters except spaces and hyphens
+          .replace(/\s+/g, '-') // Replace spaces with hyphens
+          .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+          .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+      };
+
+      let baseSlug = generateSlug(this.title);
+      if (!baseSlug || baseSlug.trim() === '') {
+        baseSlug = 'form';
+      }
+      
+      // Ensure uniqueness
+      let finalSlug = baseSlug;
+      let counter = 1;
+      
+      const FormModel = mongoose.model('Form');
+      while (await FormModel.findOne({ slug: finalSlug, _id: { $ne: this._id } })) {
+        finalSlug = `${baseSlug}-${counter}`;
+        counter++;
+      }
+      
+      this.slug = finalSlug;
+    }
+    next();
+  } catch (error) {
+    next(error as any);
   }
-  next();
 });
 
 // Virtual for form URL
