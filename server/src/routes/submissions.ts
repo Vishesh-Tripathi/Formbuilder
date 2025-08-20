@@ -223,6 +223,79 @@ router.get('/:formId', [
   });
 }));
 
+// GET /api/submissions/:formId/export - Export submissions as CSV
+router.get('/:formId/export', [
+  param('formId').isMongoId().withMessage('Invalid form ID'),
+  handleValidationErrors
+], asyncHandler(async (req: any, res: any) => {
+  const { formId } = req.params;
+  const { startDate, endDate } = req.query;
+
+  console.log(`CSV Export request for form ID: ${formId}`);
+  console.log('Query params:', { startDate, endDate });
+
+  // Verify form exists
+  const form = await Form.findById(formId);
+  if (!form) {
+    console.log(`Form not found for ID: ${formId}`);
+    return res.status(404).json({
+      success: false,
+      error: 'Form not found'
+    });
+  }
+
+  console.log(`Found form: ${form.title} with ${form.fields?.length || 0} fields`);
+
+  // Build date filter
+  const dateFilter: any = {};
+  if (startDate) dateFilter.$gte = new Date(startDate);
+  if (endDate) dateFilter.$lte = new Date(endDate);
+
+  const query: any = { formId };
+  if (Object.keys(dateFilter).length > 0) {
+    query.submittedAt = dateFilter;
+  }
+
+  console.log('Submission query:', query);
+
+  const submissions = await Submission.find(query).sort({ submittedAt: -1 }).lean();
+  console.log(`Found ${submissions.length} submissions for export`);
+
+  // Generate CSV
+  let csv = 'Submission ID,Submitted At,Email';
+  
+  // Add field headers
+  form.fields.forEach(field => {
+    csv += `,${field.label.replace(/,/g, ';')}`;
+  });
+  csv += '\n';
+
+  // Add submission data
+  submissions.forEach(submission => {
+    let row = `${submission._id},${submission.submittedAt.toISOString()},${submission.submitterEmail || ''}`;
+    
+    // Create response map for easy lookup
+    const responseMap = new Map(submission.responses.map(r => [r.fieldId, r.value]));
+    
+    form.fields.forEach(field => {
+      const value = responseMap.get(field.id) || '';
+      // Escape commas and quotes in CSV
+      const escapedValue = String(value).replace(/"/g, '""');
+      row += `,"${escapedValue}"`;
+    });
+    
+    csv += row + '\n';
+  });
+
+  console.log('CSV generated successfully, length:', csv.length);
+
+  // Set headers for file download
+  const filename = `${form.title.replace(/[^\w\s-]/g, '')}-submissions-${new Date().toISOString().split('T')[0]}.csv`;
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(csv);
+}));
+
 // GET /api/submissions/:formId/:submissionId - Get specific submission
 router.get('/:formId/:submissionId', [
   param('formId').isMongoId().withMessage('Invalid form ID'),
@@ -278,68 +351,6 @@ router.delete('/:formId/:submissionId', [
     success: true,
     message: 'Submission deleted successfully'
   });
-}));
-
-// GET /api/submissions/:formId/export - Export submissions as CSV
-router.get('/:formId/export', [
-  param('formId').isMongoId().withMessage('Invalid form ID'),
-  handleValidationErrors
-], asyncHandler(async (req: any, res: any) => {
-  const { formId } = req.params;
-  const { startDate, endDate } = req.query;
-
-  // Verify form exists
-  const form = await Form.findById(formId);
-  if (!form) {
-    return res.status(404).json({
-      success: false,
-      error: 'Form not found'
-    });
-  }
-
-  // Build date filter
-  const dateFilter: any = {};
-  if (startDate) dateFilter.$gte = new Date(startDate);
-  if (endDate) dateFilter.$lte = new Date(endDate);
-
-  const query: any = { formId };
-  if (Object.keys(dateFilter).length > 0) {
-    query.submittedAt = dateFilter;
-  }
-
-  const submissions = await Submission.find(query).sort({ submittedAt: -1 }).lean();
-
-  // Generate CSV
-  let csv = 'Submission ID,Submitted At,Email';
-  
-  // Add field headers
-  form.fields.forEach(field => {
-    csv += `,${field.label.replace(/,/g, ';')}`;
-  });
-  csv += '\n';
-
-  // Add submission data
-  submissions.forEach(submission => {
-    let row = `${submission._id},${submission.submittedAt.toISOString()},${submission.submitterEmail || ''}`;
-    
-    // Create response map for easy lookup
-    const responseMap = new Map(submission.responses.map(r => [r.fieldId, r.value]));
-    
-    form.fields.forEach(field => {
-      const value = responseMap.get(field.id) || '';
-      // Escape commas and quotes in CSV
-      const escapedValue = String(value).replace(/"/g, '""');
-      row += `,"${escapedValue}"`;
-    });
-    
-    csv += row + '\n';
-  });
-
-  // Set headers for file download
-  const filename = `${form.title.replace(/[^\w\s-]/g, '')}-submissions-${new Date().toISOString().split('T')[0]}.csv`;
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.send(csv);
 }));
 
 export default router;

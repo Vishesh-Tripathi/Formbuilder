@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { ISubmission, IForm } from '../types'
 import api from '../lib/api'
 import { Button } from '../components/ui/button'
-import { ArrowLeft, Eye, Calendar, Users, TrendingUp, Activity, X, BarChart3, FileText } from 'lucide-react'
+import { ArrowLeft, Eye, Calendar, Users, TrendingUp, Activity, X, BarChart3, FileText, Download } from 'lucide-react'
 
 const Analytics: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -111,6 +111,67 @@ const Analytics: React.FC = () => {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  const handleExportCSV = async (formId: string, formTitle: string) => {
+    try {
+      console.log('Exporting CSV for form:', formId)
+      
+      // First, let's try a regular request to see if there are validation errors
+      try {
+        const testResponse = await api.get(`/submissions/${formId}/export`)
+        console.log('Test response successful, now trying blob download...')
+      } catch (testError: any) {
+        console.error('Test request failed:', testError.response?.data)
+        if (testError.response?.data?.error) {
+          alert(`Export failed: ${testError.response.data.error}`)
+          return
+        }
+      }
+      
+      // If test passed, do the actual blob request
+      const response = await api.get(`/submissions/${formId}/export`, {
+        responseType: 'blob'
+      })
+      
+      // Create blob URL and download
+      const blob = new Blob([response.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${formTitle.replace(/[^\w\s-]/g, '')}-submissions-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      console.error('Error exporting CSV:', error)
+      
+      // Try to get the actual error message from the server
+      if (error.response?.data) {
+        try {
+          // If the error response is a blob (which it might be due to responseType: 'blob')
+          if (error.response.data instanceof Blob) {
+            const text = await error.response.data.text()
+            console.error('Server error response:', text)
+            try {
+              const errorData = JSON.parse(text)
+              alert(`Export failed: ${errorData.error || errorData.message || 'Unknown error'}`)
+            } catch {
+              alert(`Export failed: ${text}`)
+            }
+          } else {
+            console.error('Server error response:', error.response.data)
+            alert(`Export failed: ${error.response.data.error || error.response.data.message || 'Server error'}`)
+          }
+        } catch (parseError) {
+          console.error('Error parsing server response:', parseError)
+          alert('Failed to export CSV. Please try again.')
+        }
+      } else {
+        alert('Failed to export CSV. Please check your connection and try again.')
+      }
+    }
   }
 
   if (loading) {
@@ -259,6 +320,19 @@ const Analytics: React.FC = () => {
                             View
                           </Button>
                         </Link>
+                        {form.submissionCount > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              console.log('Export button clicked for form:', form._id, 'Title:', form.title)
+                              handleExportCSV(form._id, form.title)
+                            }}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Export CSV
+                          </Button>
+                        )}
                       </div>
                     </div>
                     
@@ -331,17 +405,32 @@ const Analytics: React.FC = () => {
             <p className="text-muted-foreground">{form?.title || 'Form Analytics'}</p>
           </div>
         </div>
-        {/* Test button for modal */}
-        <Button 
-          onClick={() => {
-            console.log('Test button clicked - clearing selected submission')
-            setSelectedSubmission(null)
-          }}
-          variant="outline"
-          size="sm"
-        >
-          Clear Selection
-        </Button>
+        <div className="flex gap-2">
+          {form && form.submissionCount > 0 && (
+            <Button
+              onClick={() => {
+                console.log('Export button clicked for individual form:', form._id, 'Title:', form.title)
+                handleExportCSV(form._id, form.title)
+              }}
+              variant="outline"
+              size="sm"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+          )}
+          {/* Test button for modal */}
+          <Button 
+            onClick={() => {
+              console.log('Test button clicked - clearing selected submission')
+              setSelectedSubmission(null)
+            }}
+            variant="outline"
+            size="sm"
+          >
+            Clear Selection
+          </Button>
+        </div>
       </div>
       
       {/* Stats Cards */}
@@ -399,8 +488,21 @@ const Analytics: React.FC = () => {
       
       {/* Recent Submissions */}
       <div className="bg-card rounded-lg border">
-        <div className="px-6 py-4 border-b">
+        <div className="px-6 py-4 border-b flex items-center justify-between">
           <h3 className="text-lg font-semibold">Recent Submissions</h3>
+          {form && form.submissionCount > 0 && (
+            <Button
+              onClick={() => {
+                console.log('Export All button clicked for form:', form._id, 'Title:', form.title)
+                handleExportCSV(form._id, form.title)
+              }}
+              variant="outline"
+              size="sm"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export All as CSV
+            </Button>
+          )}
         </div>
         <div className="p-6">
           {formSubmissions.length > 0 ? (

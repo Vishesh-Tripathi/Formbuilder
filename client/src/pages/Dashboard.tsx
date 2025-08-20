@@ -320,7 +320,7 @@ const Dashboard: React.FC = () => {
                             <Eye size={16} />
                           </Button>
                         </Link>
-                        <Link to={`/forms/${form._id}/analytics`}>
+                        <Link to={`/analytics/${form._id}`}>
                           <Button variant="ghost" size="sm" title="View analytics">
                             <BarChart3 size={16} />
                           </Button>
